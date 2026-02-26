@@ -1,11 +1,21 @@
 Package: footBayesX
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Extensions for Multi-Covariate Football Bayesian Models
+Version: 0.1.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Sheikh Badar Ud Din", "Tahir", 
+           email = "sheikhbadaruddin.tahir@phd.units.it", 
+           role = c("aut", "cre"))
+Description: 
+    Companion extensions to footBayes enabling multi-covariate
+    Bayesian football models using custom Stan templates.
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+Imports:
+    cmdstanr,
+    dplyr,
+    tidyr,
+    footBayes,
+    posterior,
+    loo
