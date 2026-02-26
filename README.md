@@ -5,7 +5,7 @@ footBayesX extends the `footBayes` package by allowing **multiple covariates** t
 
 ---
 
-## 📌 Motivation
+##  Motivation
 
 The original `footBayes` double Poisson model defines goal intensity as:
 
@@ -23,7 +23,7 @@ Users cannot directly incorporate multiple engineered features into the model.
 
 ---
 
-## 🚀 What footBayesX Adds
+##  What footBayesX Adds
 
 We generalize the intensity to:
 
@@ -47,7 +47,7 @@ This enables inclusion of:
 
 ---
 
-# 🏗 Architecture
+#  Architecture
 
 footBayesX consists of two components:
 
@@ -121,7 +121,7 @@ The custom wrapper:
 
 ---
 
-# 🧠 How To Use With Your Own Covariates
+#  How To Use With Your Own Covariates
 
 You can use **any engineered features**.
 
@@ -208,7 +208,7 @@ Each beta[k] corresponds to column k of your X matrix.
 
 ---
 
-# 📦 Installation
+#  Installation
 
 ```r
 devtools::install_github("https://github.com/sheikhbadar/footBayesX")
@@ -216,13 +216,13 @@ devtools::install_github("https://github.com/sheikhbadar/footBayesX")
 
 ---
 
-# 📝 License
+#  License
 
 MIT
 
 ---
 
-# 🎓 Research Use
+#  Research Use
 
 This extension enables:
 
