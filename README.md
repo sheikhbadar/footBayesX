@@ -234,9 +234,9 @@ X <- scale(cbind(
 ))
 ```
 
-✔ Rows must match match data  
-✔ Columns represent covariates  
-✔ Numeric matrix required  
+- Rows must match match data  
+- Columns represent covariates  
+- Numeric matrix required  
 
 ---
 
@@ -287,7 +287,7 @@ foot_abilities(fit_multi, italy_df2)
 
 ---
 
-# 📌 Important Notes
+#  Important Notes
 
 - Users construct X externally.
 - Covariates must align row-wise with match data.
