@@ -104,7 +104,7 @@ R/stan_foot_multi.R
 
 ---
 
-## 🔧 Why a Wrapper Was Necessary
+##  Why a Wrapper Was Necessary
 
 The original `footBayes::stan_foot()`:
 
@@ -121,82 +121,171 @@ The custom wrapper:
 
 ---
 
-#  How To Use With Your Own Covariates
-
-You can use **any engineered features**.
+  How To Use With Your Own Covariates
 
 ---
 
-## Step 1 — Prepare Data
+# 3️⃣ Example: Using Multiple Covariates
+The original `footBayes` double Poisson model explains match outcomes using:
 
-Data must contain:
+- Team attacking strength  
+- Team defensive strength  
+- Home advantage  
+- (Optional) ranking dynamics  
 
-- periods  
-- home_team  
-- away_team  
-- home_goals  
-- away_goals  
+However, modern football performance is often influenced by additional contextual features such as:
+
+- Form trends  
+- Momentum  
+- Tactical intensity  
+- Match progression  
+- Interaction effects between variables  
+
+The `footBayesX` extension allows users to incorporate **multiple match-level covariates** directly into the log-intensity of the scoring model.
+
+This example demonstrates how to:
+
+Mathematically, the scoring intensity is extended as:
+
+\[
+\log(\theta_{home}) = \text{home effect} + \text{attack}_i + \text{defense}_j + X\beta
+\]
+
+\[
+\log(\theta_{away}) = \text{attack}_j + \text{defense}_i - X\beta
+\]
+
+Where:
+
+- `X` is an \( N \times K \) design matrix of covariates  
+- `β` are regression coefficients estimated in Stan  
+- Each covariate can positively or negatively influence scoring intensity  
+
+This example shows how to:
+
+• Construct custom match-level covariates  
+• Build the design matrix `X`  
+• Fit the extended multi-covariate model  
+• Compare against the baseline `footBayes` model  
+• Perform posterior predictive checks  
+• Reconstruct league rankings  
 
 ---
 
-## Step 2 — Create Covariate Matrix
 
-Example:
+## 1) Load Packages
+
+```r
+library(dplyr)
+library(footBayes)
+library(footBayesX)
+library(posterior)
+library(loo)
+```
+
+---
+
+## 2) Load Example Data
+
+```r
+data("italy")
+
+italy_df <- as_tibble(italy) %>%
+  select(Season, home, visitor, hgoal, vgoal) %>%
+  filter(Season %in% c("2000","2001","2002"))
+
+colnames(italy_df) <- c(
+  "periods",
+  "home_team",
+  "away_team",
+  "home_goals",
+  "away_goals"
+)
+```
+
+---
+
+## 3) Create Custom Covariates
+
+Here we construct:
+
+- Goal Difference Trend  
+- Season Progress  
+- Interaction Term  
+
+```r
+italy_df <- italy_df %>%
+  arrange(periods)
+
+italy_df$GD_diff <- italy_df$home_goals - italy_df$away_goals
+italy_df$SeasonProgress <- seq_len(nrow(italy_df)) / nrow(italy_df)
+italy_df$Interaction <- italy_df$GD_diff * italy_df$SeasonProgress
+```
+
+---
+
+## 4) Build Design Matrix (N × K)
 
 ```r
 X <- scale(cbind(
-  xG_Diff            = home_xG - away_xG,
-  ShotDistance_Diff  = home_avg_shot_distance - away_avg_shot_distance,
-  PressingIntensity  = home_ppda - away_ppda,
-  RestDaysDiff       = home_rest_days - away_rest_days
+  GD_diff = italy_df$GD_diff,
+  SeasonProgress = italy_df$SeasonProgress,
+  Interaction = italy_df$Interaction
 ))
 ```
 
-Rules:
-- Must be numeric matrix
-- Rows must match match data
-- Columns = number of covariates
-- Standardization recommended
+✔ Rows must match match data  
+✔ Columns represent covariates  
+✔ Numeric matrix required  
 
 ---
 
-## Step 3 — Fit Model
+## 5) Fit Baseline Model
 
 ```r
-library(footBayesX)
+fit_baseline <- stan_foot(
+  data = italy_df,
+  model = "double_pois",
+  predict = 0,
+  chains = 2,
+  iter_sampling = 1000,
+  iter_warmup = 1000,
+  seed = 123
+)
+```
 
+---
+
+## 6) Fit Multi-Covariate Model
+
+```r
 stan_file <- system.file(
   "stan",
   "double_pois_multi.stan",
   package = "footBayesX"
 )
 
-fit <- stan_foot_multi(
-  data = match_data,
+fit_multi <- stan_foot_multi(
+  data = italy_df,
   model_file = stan_file,
   X = X,
   predict = 0,
-  chains = 4,
+  chains = 2,
   iter_sampling = 1000,
-  iter_warmup = 1000
+  iter_warmup = 1000,
+  adapt_delta = 0.95,
+  seed = 123
 )
+We can visually analyze the attack and defense effects using foot_abilities function
+
+foot_abilities(fit_multi, italy_df2)
+
+## Attack and Defense Effects
+
+![Attack and Defense Plot](figures/figure1.png)
 ```
 
 ---
-
-## Step 4 — Inspect Covariate Effects
-
-```r
-posterior::summarise_draws(
-  fit$fit$draws(),
-  variable = grep("beta", posterior::variables(fit$fit$draws()), value = TRUE)
-)
-```
-
-Each beta[k] corresponds to column k of your X matrix.
-
----
-
 
 # 📌 Important Notes
 
@@ -226,7 +315,7 @@ MIT
 
 This extension enables:
 
-- Multi-feature football modeling
+- Multi-covariate football modeling
 - Bayesian inference on match-level covariates
 - LOO / WAIC model comparison
 - Extension of footBayes without modifying original package
@@ -234,3 +323,6 @@ This extension enables:
 ---
 
 footBayesX preserves the structure of footBayes while removing its single-covariate limitation.
+
+
+
