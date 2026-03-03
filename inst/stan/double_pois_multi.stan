@@ -179,7 +179,7 @@ generated quantities{
   array[N_prev] vector[2] theta_prev;
 
   vector[N] log_lik;
-
+  vector[N] diff_y_rep;   
   for (n in 1:N){
 
     y_rep[n,1] = poisson_rng(theta[n,1]);
@@ -188,6 +188,8 @@ generated quantities{
     log_lik[n] =
       poisson_lpmf(y[n,1] | theta[n,1]) +
       poisson_lpmf(y[n,2] | theta[n,2]);
+
+    diff_y_rep[n] = y_rep[n,1] - y_rep[n,2];   
   }
 
   if (N_prev > 0){
