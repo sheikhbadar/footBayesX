@@ -282,7 +282,7 @@ foot_abilities(fit_multi, italy_df2)
 
 ## Attack and Defense Effects
 
-![Attack and Defense Plot](figures/figure1.png)
+<!--- [Attack and Defense Plot](figures/figure1.png) --->!
 ```
 
 ---
