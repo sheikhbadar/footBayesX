@@ -6,39 +6,33 @@
 \usage{
 stan_foot_multi(
   data,
-  model,
-  model_file = NULL,
+  model_file,
   X,
   X_prev = NULL,
   predict = 0,
-  ranking,
-  dynamic_type,
-  dynamic_weight = FALSE,
-  dynamic_par = list(common_sd = FALSE, spike = footBayes::normal(200, 0.1), slab =
-    footBayes::normal(0, 10), spike_prob = 0.2),
-  prior_par = list(ability = footBayes::normal(0, NULL), ability_sd =
-    footBayes::cauchy(0, 5), home = footBayes::normal(0, 5)),
-  home_effect = TRUE,
-  norm_method = "none",
-  ranking_map = NULL,
-  method = "MCMC",
-  prior_dist_num = 2,
-  prior_dist_sd_num = 2,
+  ind_home = 1,
+  mean_home = 0,
+  sd_home = 0.5,
+  beta_prior_mean = 0,
+  beta_prior_sd = 1,
+  prior_dist_num = 1,
+  prior_dist_sd_num = 1,
   hyper_df = 4,
   hyper_location = 0,
   hyper_sd_df = 3,
   hyper_sd_location = 0,
   hyper_sd_scale = 0.5,
-  mean_home = 0,
-  sd_home = 0.5,
-  ...
+  chains = 4,
+  iter_sampling = 1000,
+  iter_warmup = 1000,
+  seed = 123,
+  adapt_delta = 0.95,
+  max_treedepth = 12
 )
 }
 \arguments{
 \item{data}{Data frame with columns:
 periods, home_team, away_team, home_goals, away_goals.}
-
-\item{model}{Optional model label (kept for compatibility).}
 
 \item{model_file}{Path to the Stan model file.}
 
@@ -47,6 +41,44 @@ periods, home_team, away_team, home_goals, away_goals.}
 \item{X_prev}{Optional matrix for out-of-sample prediction.}
 
 \item{predict}{Number of matches to predict (last rows).}
+
+\item{ind_home}{indicator for home advantage (1 = include home effect)}
+
+\item{mean_home}{Prior mean for home effect.}
+
+\item{sd_home}{Prior sd for home effect.}
+
+\item{beta_prior_mean}{mean of Normal prior for regression coefficients beta}
+
+\item{beta_prior_sd}{standard deviation of beta prior}
+
+\item{prior_dist_num}{Prior type for team effects.}
+
+\item{prior_dist_sd_num}{Prior type for standard deviations.}
+
+\item{hyper_df}{Degrees of freedom for Student-t priors.}
+
+\item{hyper_location}{Location parameter for priors.}
+
+\item{hyper_sd_df}{Degrees of freedom for sd priors.}
+
+\item{hyper_sd_location}{Location for sd priors.}
+
+\item{hyper_sd_scale}{Scale for sd priors.}
+
+\item{chains}{number of MCMC chains}
+
+\item{iter_sampling}{number of sampling iterations}
+
+\item{iter_warmup}{number of warmup iterations}
+
+\item{seed}{random seed}
+
+\item{adapt_delta}{Stan NUTS adapt_delta}
+
+\item{max_treedepth}{Stan max tree depth}
+
+\item{model}{Optional model label (kept for compatibility).}
 
 \item{ranking}{Optional ranking matrix (currently not supported).}
 
@@ -65,24 +97,6 @@ periods, home_team, away_team, home_goals, away_goals.}
 \item{ranking_map}{Placeholder ranking mapping.}
 
 \item{method}{Estimation method (default "MCMC").}
-
-\item{prior_dist_num}{Prior type for team effects.}
-
-\item{prior_dist_sd_num}{Prior type for standard deviations.}
-
-\item{hyper_df}{Degrees of freedom for Student-t priors.}
-
-\item{hyper_location}{Location parameter for priors.}
-
-\item{hyper_sd_df}{Degrees of freedom for sd priors.}
-
-\item{hyper_sd_location}{Location for sd priors.}
-
-\item{hyper_sd_scale}{Scale for sd priors.}
-
-\item{mean_home}{Prior mean for home effect.}
-
-\item{sd_home}{Prior sd for home effect.}
 
 \item{...}{Additional arguments passed to cmdstanr::sample().}
 }

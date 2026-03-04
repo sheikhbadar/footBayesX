@@ -29,7 +29,15 @@
 #' @param mean_home Prior mean for home effect.
 #' @param sd_home Prior sd for home effect.
 #' @param ... Additional arguments passed to cmdstanr::sample().
-#'
+#' @param ind_home indicator for home advantage (1 = include home effect)
+#' @param beta_prior_mean mean of Normal prior for regression coefficients beta
+#' @param beta_prior_sd standard deviation of beta prior
+#' @param chains number of MCMC chains
+#' @param iter_sampling number of sampling iterations
+#' @param iter_warmup number of warmup iterations
+#' @param seed random seed
+#' @param adapt_delta Stan NUTS adapt_delta
+#' @param max_treedepth Stan max tree depth
 #' @return A list containing:
 #' \itemize{
 #'   \item fit: CmdStanMCMC object
@@ -41,225 +49,210 @@
 #' @export
 
 
-
-stan_foot_multi <- function (
+stan_foot_multi <- function(
     data,
-    model,
-    model_file = NULL,
+    model_file,
     X,
     X_prev = NULL,
     predict = 0,
-    ranking,
-    dynamic_type,
-    dynamic_weight = FALSE,
-    dynamic_par = list(
-      common_sd = FALSE,
-      spike = footBayes::normal(200, 0.1),
-      slab  = footBayes::normal(0, 10),
-      spike_prob = 0.2
-    ),
-    prior_par = list(
-      ability    = footBayes::normal(0, NULL),
-      ability_sd = footBayes::cauchy(0, 5),
-      home       = footBayes::normal(0, 5)
-    ),
-    home_effect = TRUE,
-    norm_method = "none",
-    ranking_map = NULL,
-    method = "MCMC",
 
-    # -----------------------
-    # NEW: Prior controls (these go into Stan data)
-    # -----------------------
-    prior_dist_num    = 2,   # 1=Normal, 2=Student-t, 3=Cauchy, 4=Laplace
-    prior_dist_sd_num = 2,   # 1=Normal, 2=Student-t, 3=Cauchy, 4=Laplace
+    # Home prior
+    ind_home = 1,
+    mean_home = 0,
+    sd_home = 0.5,
 
-    hyper_df          = 4,
-    hyper_location    = 0,
+    # Beta prior
+    beta_prior_mean = 0,
+    beta_prior_sd = 1,
 
-    hyper_sd_df       = 3,
+    # Ability priors
+    prior_dist_num = 1,
+    prior_dist_sd_num = 1,
+    hyper_df = 4,
+    hyper_location = 0,
+    hyper_sd_df = 3,
     hyper_sd_location = 0,
-    hyper_sd_scale    = 0.5,
+    hyper_sd_scale = 0.5,
 
-    mean_home         = 0,
-    sd_home           = 0.5,
-    ...
+    chains = 4,
+    iter_sampling = 1000,
+    iter_warmup = 1000,
+    seed = 123,
+    adapt_delta = 0.95,
+    max_treedepth = 12
 ){
 
-  # -----------------------
-  # Packages (safer than require())
-  # -----------------------
-  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Install dplyr")
-  if (!requireNamespace("tidyr", quietly = TRUE)) stop("Install tidyr")
-  if (!requireNamespace("cmdstanr", quietly = TRUE)) stop("Install cmdstanr")
+  if(!requireNamespace("cmdstanr", quietly = TRUE))
+    stop("Package 'cmdstanr' is required.")
 
-  # -----------------------
-  # BASIC CHECKS
-  # -----------------------
-  if (!is.data.frame(data))
-    stop("data must be a data.frame")
+  # ----------------------------------------------------
+  # Validate required columns
+  # ----------------------------------------------------
 
-  required_cols <- c("periods", "home_team", "away_team", "home_goals", "away_goals")
-  if (!all(required_cols %in% names(data)))
-    stop("Missing required columns: ", paste(setdiff(required_cols, names(data)), collapse = ", "))
+  required_cols <- c("home_team","away_team","home_goals","away_goals")
+  missing <- setdiff(required_cols, names(data))
 
-  if (is.null(X))
-    stop("X must be supplied")
+  if(length(missing) > 0)
+    stop("data is missing required columns: ",
+         paste(missing, collapse=", "))
 
-  if (!is.matrix(X))
-    X <- as.matrix(X)
+  # ----------------------------------------------------
+  # Validate X
+  # ----------------------------------------------------
 
-  if (predict > 0 && is.null(X_prev))
-    stop("X_prev required when predict > 0")
+  if(!is.matrix(X) || !is.numeric(X))
+    stop("X must be a numeric matrix. Encode categorical variables first.")
 
-  if (!is.null(X_prev) && !is.matrix(X_prev))
-    X_prev <- as.matrix(X_prev)
+  if(anyNA(X))
+    stop("X contains NA values. Remove or impute them before fitting.")
 
-  # -----------------------
-  # SPLIT TRAIN / TEST
-  # -----------------------
-  if (predict == 0){
-    N <- nrow(data)
-    N_prev <- 0
-  } else {
-    if (predict >= nrow(data)) stop("predict must be < nrow(data)")
-    N <- nrow(data) - predict
-    N_prev <- predict
-  }
+  N <- nrow(data)
 
-  # -----------------------
-  # TEAMS (include home + away teams)
-  # -----------------------
+  if(nrow(X) != N)
+    stop(paste0(
+      "X must have ", N, " rows (one per match) but has ", nrow(X), "."
+    ))
+
+  # ----------------------------------------------------
+  # Warn about X_prev behaviour
+  # ----------------------------------------------------
+
+  if(predict > 0 && !is.null(X_prev))
+    warning("X_prev argument ignored when predict > 0: X_prev is sliced from X.")
+
+  K <- ncol(X)
+
+  # ----------------------------------------------------
+  # Team indexing
+  # ----------------------------------------------------
+
   teams <- sort(unique(c(data$home_team, data$away_team)))
   nteams <- length(teams)
 
-  team_home <- match(data$home_team, teams)
-  team_away <- match(data$away_team, teams)
+  team_index <- setNames(seq_along(teams), teams)
 
-  if (anyNA(team_home) || anyNA(team_away))
-    stop("Some teams could not be matched to team index (NA found).")
+  team1 <- team_index[data$home_team]
+  team2 <- team_index[data$away_team]
 
-  team1 <- team_home[1:N]
-  team2 <- team_away[1:N]
+  # ----------------------------------------------------
+  # Outcomes
+  # ----------------------------------------------------
 
-  if (N_prev > 0){
-    team1_prev <- team_home[(N+1):(N+N_prev)]
-    team2_prev <- team_away[(N+1):(N+N_prev)]
+  y <- cbind(data$home_goals, data$away_goals)
+
+  # ----------------------------------------------------
+  # Train / prediction split
+  # ----------------------------------------------------
+
+  if(predict > 0){
+
+    N_prev <- predict
+    N_train <- N - predict
+
+    X_train <- X[1:N_train, , drop = FALSE]
+    X_prev <- X[(N_train+1):N, , drop = FALSE]
+
+    y <- y[1:N_train, , drop = FALSE]
+
+    team1_prev <- team1[(N_train+1):N]
+    team2_prev <- team2[(N_train+1):N]
+
+    team1 <- team1[1:N_train]
+    team2 <- team2[1:N_train]
+
+    N <- N_train
+
   } else {
+
+    N_prev <- 0
     team1_prev <- integer(0)
     team2_prev <- integer(0)
+
+    X_train <- X
+    X_prev <- matrix(0,0,K)
+
   }
 
-  # -----------------------
-  # GOALS
-  # -----------------------
-  y <- cbind(
-    data$home_goals[1:N],
-    data$away_goals[1:N]
-  )
+  # ----------------------------------------------------
+  # Ranking placeholder
+  # ----------------------------------------------------
 
-  # -----------------------
-  # RANKING
-  # -----------------------
-  if (missing(ranking)){
-    ntimes_rank <- 1
-    ranking_matrix <- matrix(0, 1, nteams)
-    instants_rank <- rep(1, N)
-  } else {
-    stop("Ranking not supported in this custom wrapper yet")
-  }
+  instants_rank <- rep(1, N)
+  ntimes_rank <- 1
+  ranking <- matrix(0, ntimes_rank, nteams)
 
-  # -----------------------
-  # HOME EFFECT
-  # -----------------------
-  ind_home <- as.integer(home_effect)
+  # ----------------------------------------------------
+  # Stan data
+  # ----------------------------------------------------
 
-  # -----------------------
-  # COVARIATES
-  # -----------------------
-  K <- ncol(X)
+  stan_data <- list(
 
-  X_train <- X[1:N, , drop = FALSE]
-
-  if (N_prev > 0){
-    if (is.null(X_prev)) stop("X_prev required when N_prev > 0")
-    if (ncol(X_prev) != K) stop("X_prev must have same number of columns as X (K)")
-  } else {
-    X_prev <- matrix(0, 0, K)
-  }
-
-  # (Optional) ensure colnames propagate to X_prev for easier debugging
-  if (!is.null(colnames(X_train)) && is.null(colnames(X_prev)) && nrow(X_prev) > 0){
-    colnames(X_prev) <- colnames(X_train)
-  }
-
-  # -----------------------
-  # STAN DATA
-  # -----------------------
-  data_stan <- list(
     N = N,
     N_prev = N_prev,
+
     y = y,
 
     nteams = nteams,
     team1 = team1,
     team2 = team2,
+
     team1_prev = team1_prev,
     team2_prev = team2_prev,
 
-    ntimes_rank = ntimes_rank,
     instants_rank = instants_rank,
-    ranking = ranking_matrix,
+    ntimes_rank = ntimes_rank,
+    ranking = ranking,
+
+    K = K,
+    X = X_train,
+    X_prev = X_prev,
 
     ind_home = ind_home,
     mean_home = mean_home,
     sd_home = sd_home,
 
+    beta_prior_mean = beta_prior_mean,
+    beta_prior_sd = beta_prior_sd,
+
     prior_dist_num = prior_dist_num,
     prior_dist_sd_num = prior_dist_sd_num,
+
     hyper_df = hyper_df,
     hyper_location = hyper_location,
     hyper_sd_df = hyper_sd_df,
     hyper_sd_location = hyper_sd_location,
-    hyper_sd_scale = hyper_sd_scale,
-
-    K = K,
-    X = X_train,
-    X_prev = X_prev
+    hyper_sd_scale = hyper_sd_scale
   )
 
-  # -----------------------
-  # LOAD STAN MODEL
-  # -----------------------
-  stan_path <- system.file(
-    "stan",
-    "double_pois_multi.stan",
-    package = "footBayesX"
+  # ----------------------------------------------------
+  # Compile and run Stan
+  # ----------------------------------------------------
+
+  mod <- cmdstanr::cmdstan_model(model_file)
+
+  fit <- mod$sample(
+    data = stan_data,
+    chains = chains,
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    seed = seed,
+    adapt_delta = adapt_delta,
+    max_treedepth = max_treedepth
   )
 
-  if (is.null(model_file)) {
-    model_file <- system.file("stan/double_pois_multi.stan",
-                              package = "footBayesX")
-  }
-
-  model_stan <- cmdstanr::cmdstan_model(model_file)
-
-  # -----------------------
-  # FIT
-  # -----------------------
-  user_dots <- list(...)
-  fit <- do.call(
-    model_stan$sample,
-    c(list(data = data_stan), user_dots)
-  )
+  # ----------------------------------------------------
+  # Return object
+  # ----------------------------------------------------
 
   out <- list(
     fit = fit,
+    stan_data = stan_data,
     data = data,
-    stan_data = data_stan,
-    stan_code = fit$code()
+    teams = teams
   )
 
-  class(out) <- "stanFoot"
+  class(out) <- "stanFootMulti"
+
   return(out)
 }
+

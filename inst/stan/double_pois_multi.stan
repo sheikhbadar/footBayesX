@@ -1,4 +1,6 @@
+
 data{
+
   int N;
   int<lower=0> N_prev;
 
@@ -15,18 +17,41 @@ data{
   int ntimes_rank;
   matrix[ntimes_rank,nteams] ranking;
 
-  // ------------------
-  // PSY COVARIATES
-  // ------------------
+  // ----------------------------------------------------
+  // MATCH COVARIATES
+  // ----------------------------------------------------
+  // K = number of covariates
+  // X  = covariates for training matches
+  // X_prev = covariates for prediction matches
+  // Covariates should typically be standardized in R
+  // ----------------------------------------------------
+
   int<lower=1> K;
   matrix[N, K] X;
   matrix[N_prev, K] X_prev;
+
+  // ----------------------------------------------------
+  // HOME EFFECT CONTROL
+  // ----------------------------------------------------
 
   int<lower=0, upper=1> ind_home;
   real mean_home;
   real<lower=1e-8> sd_home;
 
-  // priors
+  // ----------------------------------------------------
+  // BETA PRIOR (user controlled via wrapper)
+  // ----------------------------------------------------
+  // Default: Normal(0,1) assuming X is standardized
+  // beta_prior_sd must be strictly positive
+  // ----------------------------------------------------
+
+  real beta_prior_mean;
+  real<lower=1e-8> beta_prior_sd;
+
+  // ----------------------------------------------------
+  // TEAM EFFECT PRIORS
+  // ----------------------------------------------------
+
   int<lower=1,upper=4> prior_dist_num;
   int<lower=1,upper=4> prior_dist_sd_num;
 
@@ -39,6 +64,7 @@ data{
 }
 
 parameters{
+
   vector[nteams] att_raw;
   vector[nteams] def_raw;
 
@@ -46,12 +72,12 @@ parameters{
   real<lower=1e-8> sigma_def;
 
   real home;
-
   real gamma;
 
-  // ------------------
-  // PSY COEFFICIENTS
-  // ------------------
+  // ----------------------------------------------------
+  // COVARIATE COEFFICIENTS
+  // ----------------------------------------------------
+
   vector[K] beta;
 }
 
@@ -64,12 +90,17 @@ transformed parameters{
 
   array[N] vector[2] theta;
 
+  // sum-to-zero constraint for identifiability
   for (t in 1:nteams){
     att[t] = att_raw[t] - mean(att_raw);
     def[t] = def_raw[t] - mean(def_raw);
   }
 
   adj_h_eff = home * ind_home;
+
+  // ----------------------------------------------------
+  // SCORING INTENSITIES
+  // ----------------------------------------------------
 
   for (n in 1:N){
 
@@ -89,13 +120,15 @@ transformed parameters{
           (gamma/2) *
           (ranking[instants_rank[n],team1[n]] -
            ranking[instants_rank[n],team2[n]]));
-
   }
 }
 
 model{
 
-  // team priors
+  // ----------------------------------------------------
+  // TEAM ABILITY PRIORS
+  // ----------------------------------------------------
+
   for (t in 1:nteams){
 
     if (prior_dist_num == 1){
@@ -124,7 +157,10 @@ model{
     }
   }
 
-  // sd priors
+  // ----------------------------------------------------
+  // SD PRIORS
+  // ----------------------------------------------------
+
   if (prior_dist_sd_num == 1){
     target += normal_lpdf(sigma_att |
                           hyper_sd_location,
@@ -160,13 +196,23 @@ model{
                                       hyper_sd_scale);
   }
 
-  // fixed effects
+  // ----------------------------------------------------
+  // FIXED EFFECTS
+  // ----------------------------------------------------
+
   target += normal_lpdf(home | mean_home, sd_home);
   target += normal_lpdf(gamma | 0,1);
 
-  beta ~ normal(0,1);
+  // ----------------------------------------------------
+  // COVARIATE PRIOR
+  // ----------------------------------------------------
 
-  // likelihood
+  beta ~ normal(beta_prior_mean, beta_prior_sd);
+
+  // ----------------------------------------------------
+  // LIKELIHOOD
+  // ----------------------------------------------------
+
   target += poisson_lpmf(y[,1] | theta[,1]);
   target += poisson_lpmf(y[,2] | theta[,2]);
 }
@@ -179,7 +225,8 @@ generated quantities{
   array[N_prev] vector[2] theta_prev;
 
   vector[N] log_lik;
-  vector[N] diff_y_rep;   
+  vector[N] diff_y_rep;
+
   for (n in 1:N){
 
     y_rep[n,1] = poisson_rng(theta[n,1]);
@@ -189,7 +236,7 @@ generated quantities{
       poisson_lpmf(y[n,1] | theta[n,1]) +
       poisson_lpmf(y[n,2] | theta[n,2]);
 
-    diff_y_rep[n] = y_rep[n,1] - y_rep[n,2];   
+    diff_y_rep[n] = y_rep[n,1] - y_rep[n,2];
   }
 
   if (N_prev > 0){
