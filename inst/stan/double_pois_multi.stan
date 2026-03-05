@@ -219,28 +219,17 @@ model{
 
 generated quantities{
 
-  array[N,2] int y_rep;
   array[N_prev,2] int y_prev;
-
   array[N_prev] vector[2] theta_prev;
-
   vector[N] log_lik;
-  vector[N] diff_y_rep;
 
   for (n in 1:N){
-
-    y_rep[n,1] = poisson_rng(theta[n,1]);
-    y_rep[n,2] = poisson_rng(theta[n,2]);
-
     log_lik[n] =
       poisson_lpmf(y[n,1] | theta[n,1]) +
       poisson_lpmf(y[n,2] | theta[n,2]);
-
-    diff_y_rep[n] = y_rep[n,1] - y_rep[n,2];
   }
 
   if (N_prev > 0){
-
     for (n in 1:N_prev){
 
       theta_prev[n,1] =
@@ -260,8 +249,9 @@ generated quantities{
             (ranking[instants_rank[N],team1_prev[n]] -
              ranking[instants_rank[N],team2_prev[n]]));
 
-      y_prev[n,1] = poisson_rng(theta_prev[n,1]);
-      y_prev[n,2] = poisson_rng(theta_prev[n,2]);
+      y_prev[n,1] = poisson_rng(fmax(theta_prev[n,1], 1e-10));
+      y_prev[n,2] = poisson_rng(fmax(theta_prev[n,2], 1e-10));
     }
   }
 }
+
