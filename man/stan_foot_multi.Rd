@@ -15,8 +15,8 @@ stan_foot_multi(
   sd_home = 0.5,
   beta_prior_mean = 0,
   beta_prior_sd = 1,
-  prior_dist_num = 1,
-  prior_dist_sd_num = 1,
+  prior_dist_num = 2,
+  prior_dist_sd_num = 2,
   hyper_df = 4,
   hyper_location = 0,
   hyper_sd_df = 3,
@@ -27,89 +27,106 @@ stan_foot_multi(
   iter_warmup = 1000,
   seed = 123,
   adapt_delta = 0.95,
-  max_treedepth = 12
+  max_treedepth = 12,
+  parallel_chains = 1,
+  init = NULL
 )
 }
 \arguments{
 \item{data}{Data frame with columns:
-periods, home_team, away_team, home_goals, away_goals.}
+home_team, away_team, home_goals, away_goals.}
 
-\item{model_file}{Path to the Stan model file.}
+\item{model_file}{Path to the compiled Stan model file.
+Use \code{system.file("stan","double_pois_multi.stan", package="footBayesX")}.}
 
-\item{X}{Numeric matrix of covariates (N x K).}
+\item{X}{Numeric matrix of covariates (N x K). Should be standardised
+via \code{scale()} before passing. One row per match.}
 
-\item{X_prev}{Optional matrix for out-of-sample prediction.}
+\item{X_prev}{Optional. Ignored when \code{predict > 0} (X_prev is
+sliced automatically from X).}
 
-\item{predict}{Number of matches to predict (last rows).}
+\item{predict}{Integer. Number of last rows of \code{data} to use as
+out-of-sample prediction set. Default \code{0} (no prediction).}
 
-\item{ind_home}{indicator for home advantage (1 = include home effect)}
+\item{ind_home}{Integer 0 or 1. Include home advantage effect. Default \code{1}.}
 
-\item{mean_home}{Prior mean for home effect.}
+\item{mean_home}{Prior mean for home effect. Default \code{0}.}
 
-\item{sd_home}{Prior sd for home effect.}
+\item{sd_home}{Prior SD for home effect. Default \code{0.5}.}
 
-\item{beta_prior_mean}{mean of Normal prior for regression coefficients beta}
+\item{beta_prior_mean}{Prior mean for covariate coefficients beta. Default \code{0}.}
 
-\item{beta_prior_sd}{standard deviation of beta prior}
+\item{beta_prior_sd}{Prior SD for covariate coefficients beta. Default \code{1}.
+Assumes X is standardised. Increase if X is not scaled.}
 
-\item{prior_dist_num}{Prior type for team effects.}
+\item{prior_dist_num}{Integer 1-4. Prior family for team abilities.
+1=Normal, 2=Student-t, 3=Cauchy, 4=Laplace. Default \code{2}.}
 
-\item{prior_dist_sd_num}{Prior type for standard deviations.}
+\item{prior_dist_sd_num}{Integer 1-4. Prior family for ability SDs.
+1=Normal, 2=Student-t, 3=Cauchy, 4=Laplace. Default \code{2}.}
 
-\item{hyper_df}{Degrees of freedom for Student-t priors.}
+\item{hyper_df}{Degrees of freedom for Student-t ability prior.
+Only used when \code{prior_dist_num = 2}. Default \code{4}.}
 
-\item{hyper_location}{Location parameter for priors.}
+\item{hyper_location}{Location hyperparameter for ability prior. Default \code{0}.}
 
-\item{hyper_sd_df}{Degrees of freedom for sd priors.}
+\item{hyper_sd_df}{Degrees of freedom for Student-t SD prior.
+Only used when \code{prior_dist_sd_num = 2}. Default \code{3}.}
 
-\item{hyper_sd_location}{Location for sd priors.}
+\item{hyper_sd_location}{Location hyperparameter for SD prior. Default \code{0}.}
 
-\item{hyper_sd_scale}{Scale for sd priors.}
+\item{hyper_sd_scale}{Scale hyperparameter for SD prior. Default \code{0.5}.}
 
-\item{chains}{number of MCMC chains}
+\item{chains}{Number of MCMC chains. Default \code{4}.}
 
-\item{iter_sampling}{number of sampling iterations}
+\item{iter_sampling}{Number of post-warmup samples per chain. Default \code{1000}.}
 
-\item{iter_warmup}{number of warmup iterations}
+\item{iter_warmup}{Number of warmup samples per chain. Default \code{1000}.}
 
-\item{seed}{random seed}
+\item{seed}{Random seed for reproducibility. Default \code{123}.}
 
-\item{adapt_delta}{Stan NUTS adapt_delta}
+\item{adapt_delta}{Stan NUTS target acceptance rate. Default \code{0.95}.
+Increase to \code{0.99} if divergences occur.}
 
-\item{max_treedepth}{Stan max tree depth}
+\item{max_treedepth}{Stan NUTS maximum tree depth. Default \code{12}.}
 
-\item{model}{Optional model label (kept for compatibility).}
+\item{parallel_chains}{Number of chains to run in parallel. Default \code{1}.
+Cannot exceed \code{chains}. Set equal to \code{chains} for maximum speed.}
 
-\item{ranking}{Optional ranking matrix (currently not supported).}
-
-\item{dynamic_type}{Placeholder for compatibility.}
-
-\item{dynamic_weight}{Placeholder for compatibility.}
-
-\item{dynamic_par}{Placeholder list for dynamic priors.}
-
-\item{prior_par}{Placeholder list for prior settings.}
-
-\item{home_effect}{Logical, include home advantage.}
-
-\item{norm_method}{Placeholder normalization method.}
-
-\item{ranking_map}{Placeholder ranking mapping.}
-
-\item{method}{Estimation method (default "MCMC").}
-
-\item{...}{Additional arguments passed to cmdstanr::sample().}
+\item{init}{Initial values for Stan parameters. Must be \code{NULL} (Stan
+default), a named list, or a function returning a named list. Default \code{NULL}.}
 }
 \value{
-A list containing:
+A list of class \code{"stanFootMulti"} containing:
 \itemize{
-\item fit: CmdStanMCMC object
-\item data: original data
-\item stan_data: list passed to Stan
-\item stan_code: Stan code used
+\item \code{fit}: CmdStanMCMC object from cmdstanr
+\item \code{stan_data}: list passed to Stan
+\item \code{data}: original input data frame
+\item \code{teams}: sorted vector of team names
 }
 }
 \description{
-Extends the footBayes double Poisson model to allow multiple covariates
-through a linear predictor term X * beta.
+Extends the footBayes double Poisson model to allow multiple match-level
+covariates through a symmetric linear predictor term X * beta.
+}
+\examples{
+\dontrun{
+stan_file <- system.file("stan", "double_pois_multi.stan", package = "footBayesX")
+
+X <- scale(cbind(psych_diff = rnorm(100), tact_diff = rnorm(100)))
+
+fit <- stan_foot_multi(
+  data              = my_data,
+  model_file        = stan_file,
+  X                 = X,
+  predict           = 10,
+  prior_dist_num    = 2,
+  prior_dist_sd_num = 2,
+  hyper_df          = 4,
+  chains            = 4,
+  parallel_chains   = 4,
+  seed              = 42
+)
+}
+
 }
