@@ -249,8 +249,8 @@ generated quantities{
             (ranking[instants_rank[N],team1_prev[n]] -
              ranking[instants_rank[N],team2_prev[n]]));
 
-      y_prev[n,1] = poisson_rng(fmax(theta_prev[n,1], 1e-10));
-      y_prev[n,2] = poisson_rng(fmax(theta_prev[n,2], 1e-10));
+      y_prev[n,1] = poisson_rng(fmax(theta_prev[n,1], 1e-9));
+      y_prev[n,2] = poisson_rng(fmax(theta_prev[n,2], 1e-9));
     }
   }
 }
